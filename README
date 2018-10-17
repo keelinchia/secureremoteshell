@@ -1,0 +1,4 @@
+1. Compile using make
+2. The port number is specified in the program.
+3. Execute command: ./server
+   	   	    ./client pyrite <command>
