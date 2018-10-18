@@ -1,4 +1,6 @@
 1. Compile using make
 2. The port number is specified in the program.
 3. Execute command: ./server
-   	   	    ./client pyrite <command>
+   	   	    ./client pyrite <command> or ./client pyrite-n2 <command>
+
+4. I failed to send the stdout and stderror back to the client. Some constructive feedbacks from the TAs will be greatly appreciated. 

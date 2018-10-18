@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <string.h>
+#include <netdb.h>
+#include <sys/wait.h>
 
 #define PORT_NUMBER 53953
 
@@ -21,12 +24,16 @@ int main(int argc, char *argv[])
   int listenfd, connfd;
   socklen_t cli_length; 
   struct sockaddr_in serv_addr, cli_addr;
+  struct hostent *client;
 
   /* Create a socket for communication. */
-  if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+  if ((listenfd = socket(PF_INET, SOCK_STREAM, 0)) < 0) {
     err_sys("socket error");
   }
 
+  /* Initialize server struct to zero. */
+  memset((char *) &serv_addr, 0, sizeof(struct sockaddr_in));
+  
   /* Specify the address family. */
   serv_addr.sin_family = AF_INET;
 
@@ -40,6 +47,7 @@ int main(int argc, char *argv[])
   if (bind(listenfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
     err_sys("bind error");
   }
+  
   /* Make socket listen with client queue of size 5. */
   if (listen(listenfd, 5) < 0) {
     err_sys("listen error");
@@ -47,17 +55,20 @@ int main(int argc, char *argv[])
 
   printf("Listening...\n");
   
-  cli_length = sizeof(cli_addr);
   for(;;) {
+    cli_length = sizeof(cli_addr);
     /* Blocks until client connects. */
     connfd = accept(listenfd, (struct sockaddr *) &cli_addr, &cli_length);
     if (connfd < 0) {
       err_sys("accept error");
     }
+
+    /* Get client. */
+    client = gethostbyaddr((char *) &cli_addr.sin_addr, cli_length, AF_INET);
     
     /* Fork a child to handle a client. */
     if(fork() == 0) {// child
-      printf("Connected\n");
+      printf("Connected client: %s\n", client->h_name);
       close(listenfd);
       run_shell(connfd);
       close(connfd);
@@ -65,28 +76,45 @@ int main(int argc, char *argv[])
     }
     close(connfd);
   }
-  
-  return 0;
 }
 
 void run_shell(int connfd)
 {
-  int i, j;
+  int i, n, f;
   char *args[256];
-
-  /* Read client's command. */
-  j = 0;
-  while (args[j] != NULL) {
-    if ((i = read(connfd, args[j], sizeof(args[j]))) < 0) {
-      err_sys("error writing");
-    }
-    j++;
+  char *token;
+  char buff[256];
+  
+  /* Receive client's command into buff. */
+  if ((n = recv(connfd, buff, sizeof(buff), 0)) < 0) {
+    err_sys("error receiving");
   }
-
-  /* Associate connfd with stdout and stderror. */
-  dup2(connfd, 1);
-  dup2(connfd, 2);
+  
+  printf("Received command: ");
+  printf("%s ", buff);
+  printf("\n");
+  
+  /* Tokenize buff and store tokens into args. */
+  i = 0;
+  token = strtok(buff, " ");
+  while (token != NULL) {  
+    args[i] = token; 
+    token = strtok(NULL, " ");
+    i++;
+  }
   
   /* Execute the command. */
+  printf("Executing client's command...\n");
   execvp(args[0], args);
+
+  /* Attempting to redirect stdout and stderr to the client. */
+  dup2(1, connfd);
+  dup2(2, connfd);
+  close(1);
+  close(2);
+  
+  /* Send output of execvp to client. */
+  if ((n = send(connfd, buff, sizeof(buff), 0)) < 0) {
+    err_sys("error sending");
+  }
 }
