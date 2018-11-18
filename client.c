@@ -10,6 +10,8 @@
 
 #define PORT_NUMBER 53953
 
+void encrypt(char *buff);
+
 void err_sys(char *msg)
 {
   perror(msg);
@@ -18,8 +20,8 @@ void err_sys(char *msg)
 
 int main(int argc, char *argv[])
 {
-  int listenfd, i, n;
-  char *buff;
+  int listenfd, i, n, length;
+  char *buff, *token;
   
   struct sockaddr_in serv_addr;
   struct hostent *server; // For the definition of the server on the internet.
@@ -49,36 +51,83 @@ int main(int argc, char *argv[])
   if (connect(listenfd,(struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
     err_sys("connect error");
   }
-  
-  /* Parse user's command. */
+
+  buff = malloc(16384);
+  /* Parse user's command from argv into one string. */
   i = 0;
-  buff = malloc(100 * sizeof(argv[0]));
-  printf("User's command:");
   while (argv[i+2] != NULL) {
     strcat(buff, argv[i+2]);
-    strcat(buff, " ");
     i++;
-  }
-  printf("%s\n", buff);
-  
-  /* Send the command to the server. */ 
-  n = send(listenfd, buff, sizeof(buff), 0);
-  if (n < 0) {
-    err_sys("error sending");
-  }
-  
-  printf("Executing on server...\n");
-  
-  /* Receive output from the server to args. */ 
-  if ((n = recv(listenfd, buff, sizeof(buff), 0)) < 0) {
-    err_sys("error receiving");
-  }
-  
-  /* Print the output. */
-  printf("%s\n", buff);
+  }  
+ 
+  do {
+    /* Display user's command. */
+    printf("User's command: %s\n", buff);
+    
+    /* Encrypt the command */
+    encrypt(buff);
+    
+    /* Display the ciphertext for testing. */
+    printf("Command in ciphertext: %s\n", buff);   
+    
+    n = send(listenfd, buff, sizeof(buff), 0);
+    if (n < 0) {
+      err_sys("error sending");
+    }
+    
+    printf("Executing on server...\n");
+    
+    /* Receive output from the server into buff. */ 
+    for(;;) {
+      if ((n = recv(listenfd, buff, sizeof(buff), 0)) < 0) {
+	err_sys("error receiving");
+      }
+      /* Print the output in the same format. */
+      printf("%.*s", n, buff);
+      
+      if (n < sizeof(buff)) {
+	break;
+      }  
+    }
+    printf("\n");
+
+    memset(buff, '\0', 16384);
+    
+    /* Wait for more command from the user. */
+    printf("Enter command (\"quit\" to exit): ");
+
+    fgets(buff, 16384, stdin);
+    
+    /* Get rid of the '\n'. */
+    length = strlen(buff); 
+    if (buff[length - 1] == '\n') { 
+      buff[length - 1] = '\0';
+    }
+
+    if (strcmp(buff, "quit") == 0) {
+      break;
+    }
+    
+    //free(buff);
+    //buff = malloc(16384);
+    
+  } while (1);
 
   free(buff);
+  
   close(listenfd);
   
   exit(0);
+}
+
+/* Helper Functions */
+void encrypt(char *buff)
+{
+  int i;
+  
+  i = 0;
+  while (buff[i] != '\0') {
+    buff[i] += 3; // isu id: 53953 
+    i++;
+  }
 }

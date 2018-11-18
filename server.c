@@ -11,7 +11,8 @@
 
 #define PORT_NUMBER 53953
 
-void run_shell(int connfd);
+int run_shell(int connfd);
+void decrypt(char *buff);
 
 void err_sys(char *msg)
 {
@@ -21,7 +22,8 @@ void err_sys(char *msg)
 
 int main(int argc, char *argv[])
 {
-  int listenfd, connfd;
+  int listenfd, connfd, status;
+  pid_t pid;
   socklen_t cli_length; 
   struct sockaddr_in serv_addr, cli_addr;
   struct hostent *client;
@@ -65,56 +67,123 @@ int main(int argc, char *argv[])
 
     /* Get client. */
     client = gethostbyaddr((char *) &cli_addr.sin_addr, cli_length, AF_INET);
-    
+
     /* Fork a child to handle a client. */
-    if(fork() == 0) {// child
+    pid = fork(); 
+    if(pid == 0) {// child 
       printf("Connected client: %s\n", client->h_name);
-      close(listenfd);
-      run_shell(connfd);
+      close(listenfd);    
+      
+      while(!run_shell(connfd)) {
+	printf("Done.\n\n");
+      }
+      
+      printf("Client has terminated.\n\n");
       close(connfd);
       exit(0);
+    } else {
+      pid = wait(&status);
     }
-    close(connfd);
   }
 }
 
-void run_shell(int connfd)
+int run_shell(int connfd)
 {
-  int i, n, f;
-  char *args[256];
-  char *token;
-  char buff[256];
+  int i, j, n, f, cmd, num_cmd, multi, status;
+  pid_t pid, kill_pid; 
+  char *args[100], *commands[100], *token, *buff, *copy;
+
+  buff = malloc(16384);
+  copy = malloc(16384);
   
   /* Receive client's command into buff. */
   if ((n = recv(connfd, buff, sizeof(buff), 0)) < 0) {
     err_sys("error receiving");
   }
-  
-  printf("Received command: ");
-  printf("%s ", buff);
-  printf("\n");
-  
-  /* Tokenize buff and store tokens into args. */
-  i = 0;
-  token = strtok(buff, " ");
-  while (token != NULL) {  
-    args[i] = token; 
-    token = strtok(NULL, " ");
-    i++;
+
+  /* If client has terminated, return 1 to break the loop. */
+  if (n == 0) {
+    return 1; 
   }
   
-  /* Execute the command. */
-  printf("Executing client's command...\n");
-  execvp(args[0], args);
-
-  /* Attempting to redirect stdout and stderr to the client. */
-  dup2(1, connfd);
-  dup2(2, connfd);
-  close(1);
-  close(2);
+  printf("Received command: %s\n", buff);
+ 
+  /* Decrypt the command.  */
+  decrypt(buff);
   
-  /* Send output of execvp to client. */
-  if ((n = send(connfd, buff, sizeof(buff), 0)) < 0) {
-    err_sys("error sending");
+  /* Print the plaintext for testing. */
+  printf("Command in plaintext: %s\n", buff);
+  
+  /* Tokenize the command in buff and store tokens into commands[]. */
+  strcpy(copy, buff);
+
+  i = 0;
+  token = strtok(copy, ";");
+  printf("token: %s\n", token);
+  while (token != NULL) {
+    commands[i] = token;
+    token = strtok(NULL, ";");
+    i++;
+  }
+  commands[i] = NULL;
+
+  printf("command: %s\n", commands[0]);
+  printf("command: %s\n", commands[1]);
+  
+  cmd = 0;
+  while (commands[cmd] != NULL) {
+    memset(buff, '\0', 16384);
+    memset(copy, '\0', 16384);
+    
+    /* Look for flags in a command. 
+       Separate a command its flags with white spaces. 
+       Store the command with its flags in args[] for execution. */
+    strcpy(copy, commands[cmd]);
+    
+    j = 1;
+    token = strtok(copy, "-");
+    args[0] = token;
+    token = strtok(NULL, "-");
+    while (token != NULL) {
+      args[j] = "-"; //adding back "-"
+      strcat(args[j], token);
+      token = strtok(NULL, "-");
+      j++;
+    }
+    args[j] = token;
+    
+    printf("Executing client's command...\n");
+    printf("Executing command \"%s\"...\n", commands[cmd]); 
+    
+    /* Fork a child to execute the command. */
+    pid = fork();
+    if (pid == 0) { //child      
+      /* Redirect stdout and stderr to connfd. */
+      dup2(connfd, 1);
+      dup2(connfd, 2);
+    
+      execvp(args[0], args);  	
+    } else {
+      kill_pid = wait(&status);
+    }
+    
+    cmd ++;
+  }
+
+  free(buff);
+  free(copy);
+
+  return 0;
+}
+
+/* Helper Functions */
+void decrypt(char *buff)
+{
+  int i;
+
+  i = 0;
+  while (buff[i] != '\0') {
+    buff[i] -= 3; // isu id: 53953
+    i++;
   }
 }
