@@ -1,6 +1,21 @@
-1. Compile using make
-2. The port number is specified in the program.
-3. Execute command: ./server
-   	   	    ./client pyrite <command> or ./client pyrite-n2 <command>
+1. Use make to compile
 
-4. I failed to send the stdout and stderror back to the client. Some constructive feedbacks from the TAs will be greatly appreciated. 
+2. The port number is defined in the program.
+
+3. Execute commands: ./server
+                    ./client pyrite <command> or ./client pyrite-n2 <command>
+
+4. Output redirect fixed.
+
+5. Attempted to implement multiple commands, i.e. <_;_;_>, but not working.
+
+6. Parent process on the server uses wait() to reap zombie processes.
+
+7. Commands with spaces and flags do not work.
+
+8. Server can run single commands multiple times.
+
+9. "History" and "Jobs" commands not implemented.
+
+10. Encryption and decryption should work fine.
+
